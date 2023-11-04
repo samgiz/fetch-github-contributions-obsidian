@@ -78,7 +78,7 @@ export default class FetchGithubDataPlugin extends Plugin {
   async fetchGitHubData() {
     const baseDirectory = this.app.vault.getAbstractFileByPath(this.settings.base_directory);
     if (!baseDirectory) {
-      await this.app.vault.createdirectory(this.settings.base_directory);
+      await this.app.vault.createFolder(this.settings.base_directory);
     }
     for (let year = this.settings.starting_year; year <= new Date().getFullYear(); year++) {
       this.fetchContributionsForYear(this.settings.username, year)
@@ -90,7 +90,7 @@ export default class FetchGithubDataPlugin extends Plugin {
   saveSettings() {
     this.saveData(this.settings);
   }
-};
+}
 
 class FetchGithubDataTab extends PluginSettingTab {
   plugin: FetchGithubDataPlugin;
