@@ -1,134 +1,140 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-
+import { App, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
 // Remember to rename these classes and interfaces!
 
-interface MyPluginSettings {
-	mySetting: string;
+interface PluginSettings {
+	base_directory: string;
+	starting_year: number;
+	username: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: PluginSettings = {
+	base_directory: '_github_data',
+	starting_year: 2008, // GitHub was founded in 2008
+	username: 'username',
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class FetchGithubDataPlugin extends Plugin {
+  settings: PluginSettings;
+  async onload() {
+    // Set up settings
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.addSettingTab(new FetchGithubDataTab(this.app, this));
+    this.addCommand({
+      id: 'fetch',
+      name: 'Fetch GitHub Data',
+      callback: () => this.fetchGitHubData(),
+    });
+  }
 
-	async onload() {
-		await this.loadSettings();
+  async fetchContributionsForYear(username: string, year: number) {
+    const url = `https://github.com/users/${username}/contributions?from=${year}-01-01&to=${year}-12-31`;
+    const response = await fetch(url);
+    const body = await response.text();
+    return body;
+  }
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+  parseContributionData(html: string) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const elements = doc.querySelectorAll('td.ContributionCalendar-day');
+    const contributions: Record<string, number> = {};
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+    elements.forEach(elem => {
+        const countText = elem.querySelector('span')?.textContent;
+        if (countText === null || countText === undefined) {
+          console.log('No count text found for element', elem)
+          return;
+        }
+        const match = countText.match(/(\d+) contributions?/);
+        const count = match ? parseInt(match[1], 10) : 0;
+        const date = elem.getAttribute('data-date');
+        if (date == null) {
+          console.log('No date found for element', elem)
+          return;
+        }
+        if (date && count > 0) {
+            contributions[date] = count;
+        }
+    });
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+    return contributions;
+  }
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
+  async saveDataToFile(data: Record<string, number>, year: number) {
+    // Fetch obsidian settings value for base directory
+    const baseDirectory = this.settings.base_directory;
+    const filePath = `${baseDirectory}/${year}.json`;
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    
+    if (file instanceof TFile) {
+      // Update the existing file
+      this.app.vault.modify(file, JSON.stringify(data));
+    } else {
+      // Create a new file
+      this.app.vault.create(filePath, JSON.stringify(data));
+    }
+  }
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+  async fetchGitHubData() {
+    const baseDirectory = this.app.vault.getAbstractFileByPath(this.settings.base_directory);
+    if (!baseDirectory) {
+      await this.app.vault.createdirectory(this.settings.base_directory);
+    }
+    for (let year = this.settings.starting_year; year <= new Date().getFullYear(); year++) {
+      this.fetchContributionsForYear(this.settings.username, year)
+        .then(this.parseContributionData)
+        .then(data => this.saveDataToFile(data, year))
+    }
+  }
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
+  saveSettings() {
+    this.saveData(this.settings);
+  }
+};
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
+class FetchGithubDataTab extends PluginSettingTab {
+  plugin: FetchGithubDataPlugin;
 
-	onunload() {
+  constructor(app: App, plugin: FetchGithubDataPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
 
-	}
+  display(): void {
+    const { containerEl } = this;
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
+    containerEl.empty();
 
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+    new Setting(containerEl)
+      .setName('Username')
+      .setDesc('The github username to fetch contribution statistics for')
+      .addText(text => text
+        .setPlaceholder('username')
+        .setValue(this.plugin.settings.username)
+        .onChange(async (value) => {
+          this.plugin.settings.username = value;
+          await this.plugin.saveSettings();
+        }));
+    new Setting(containerEl)
+      .setName('Initial Year')
+      .setDesc("Specifies the year to start fetching data from (data is fetched in one year intervals). The last year will always be the current year, and the default is 2008, the year GitHub was founded. In theory after fetching data for the first time, you can set this to the current year and it will only fetch data from that year onwards. I'm not optimising that myself because there aren't that many years to fetch anyways.")
+      .addText(text => text
+        .setPlaceholder('2008')
+        .setValue(this.plugin.settings.starting_year.toString())
+        .onChange(async (value) => {
+          this.plugin.settings.starting_year = Number(value);
+          await this.plugin.saveSettings();
+        })
+        .inputEl.setAttribute('type', 'number'))
+    new Setting(containerEl)
+      .setName('Base Directory')
+      .setDesc("Where to store the fetched contributions data. Defaults to a directory called '_github_data' in the root of your vault. The data for each year will be stored in a file called '{year}.json' in this directory.")
+      .addText(text => text
+        .setPlaceholder('_github_data')
+        .setValue(this.plugin.settings.base_directory)
+        .onChange(async (value) => {
+          this.plugin.settings.base_directory = value;
+          await this.plugin.saveSettings();
+        }));
+  }
 }
