@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "fetch-github-contributions",
+	"name": "Fetch GitHub Contributions",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "This is a sample plugin for Obsidian. This plugin demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Adds a command to obsidian to fetch the number of github contributions and store it locally",
+	"author": "samgiz",
+	"authorUrl": "https://github.com/samgiz",
+	"fundingUrl": "https://github.com/sponsors/samgiz/dashboard",
 	"isDesktopOnly": false
 }
