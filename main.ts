@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, requestUrl } from 'obsidian';
 
 interface PluginSettings {
 	base_directory: string;
@@ -27,8 +27,8 @@ export default class FetchGithubDataPlugin extends Plugin {
 
   async fetchContributionsForYear(username: string, year: number) {
     const url = `https://github.com/users/${username}/contributions?from=${year}-01-01&to=${year}-12-31`;
-    const response = await fetch(url);
-    const body = await response.text();
+    const response = await requestUrl(url);
+    const body = response.text;
     return body;
   }
 
