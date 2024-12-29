@@ -1,5 +1,4 @@
 import { App, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
-// Remember to rename these classes and interfaces!
 
 interface PluginSettings {
 	base_directory: string;
@@ -36,27 +35,28 @@ export default class FetchGithubDataPlugin extends Plugin {
   parseContributionData(html: string) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
-    const elements = doc.querySelectorAll('td.ContributionCalendar-day');
+    const toolTipElements = doc.querySelectorAll('tool-tip');
+    const idToCount: Map<string, number> = new Map<string, number>();
+    const getCount = (id: string) => idToCount.get(id) ?? 0;
+    toolTipElements.forEach(elem => {
+      const id = elem.getAttribute('for');
+      const text = elem.textContent ?? '';
+      const match = text.match(/^(\d+) contributions?/);
+      const count = match ? parseInt(match[1], 10) : 0;
+      if (id && count) {
+        idToCount.set(id, count);
+      }
+    });
+    const tdElements = doc.querySelectorAll('td.ContributionCalendar-day');
     const contributions: Record<string, number> = {};
-
-    elements.forEach(elem => {
-        const countText = elem.querySelector('span')?.textContent;
-        if (countText === null || countText === undefined) {
-          console.log('No count text found for element', elem)
-          return;
-        }
-        const match = countText.match(/(\d+) contributions?/);
-        const count = match ? parseInt(match[1], 10) : 0;
+    tdElements.forEach(elem => {
+        const count = getCount(elem.id);
         const date = elem.getAttribute('data-date');
-        if (date == null) {
-          console.log('No date found for element', elem)
-          return;
-        }
         if (date && count > 0) {
-            contributions[date] = count;
+          console.log("Adding contribution", date, count)
+          contributions[date] = count;
         }
     });
-
     return contributions;
   }
 
